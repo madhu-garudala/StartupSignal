@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #08090a;
+  --surface: #0d1012;
+  --surface-2: #121619;
+  --line: #242b2f;
+  --line-bright: #39444a;
+  --text: #f4f7f8;
+  --muted: #8a969d;
+  --cyan: #6be6ef;
+  --cyan-dim: #1f6870;
+  --blue: #6d8cff;
+  --amber: #f2b866;
+  --green: #62ce91;
+  --red: #f17b74;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); color-scheme: dark; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+  min-height: 100vh;
+}
+button, input { font: inherit; }
+button { cursor: pointer; }
+::selection { background: rgba(107, 230, 239, .22); color: white; }
+
+.mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+.hairline { border-color: color-mix(in srgb, var(--line) 88%, transparent); }
+.glass { background: rgba(13, 16, 18, .82); backdrop-filter: blur(18px); }
+.panel { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; }
+.signal-grid {
+  background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
+}
+.focus-ring:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.fine-scroll { scrollbar-width: thin; scrollbar-color: #2a3439 transparent; }
+.meter-fill { transition: width 700ms cubic-bezier(.2,.8,.2,1); }
+.text-balance { text-wrap: balance; }
+
+@keyframes scan {
+  0% { transform: translateY(-20px); opacity: 0; }
+  12%, 75% { opacity: .45; }
+  100% { transform: translateY(220px); opacity: 0; }
+}
+.scan-line { animation: scan 3.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+
+@media print {
+  body { background: white; color: #111; }
+  .no-print { display: none !important; }
+  .memo-print { border: 0 !important; background: white !important; color: #111 !important; padding: 0 !important; }
+  .memo-print * { color: #111 !important; border-color: #ddd !important; }
+}
