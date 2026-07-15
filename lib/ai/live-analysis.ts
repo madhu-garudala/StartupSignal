@@ -124,15 +124,15 @@ function finalizeAnalysis(
   });
 }
 
-export async function analyzeSources(canonicalUrl: string, sources: SourceDocument[]): Promise<InvestigationRun> {
+export async function analyzeSources(canonicalUrl: string, sources: SourceDocument[], crawlWarnings: string[] = []): Promise<InvestigationRun> {
   const corpus = safeCorpus(sources);
   const model = process.env.OPENAI_MODEL || "gpt-5.6-terra";
   const now = new Date().toISOString();
   const response = await client().responses.parse({
     model,
     store: false,
-    reasoning: { effort: "medium" },
-    max_output_tokens: 14_000,
+    reasoning: { effort: "low" },
+    max_output_tokens: 7_500,
     instructions: SYSTEM_INSTRUCTIONS,
     input: `Analyze the following bounded website-only corpus for ${canonicalUrl}.
 The analyzedAt and memo generatedAt values must be ${now}.
@@ -140,7 +140,9 @@ Use ${canonicalUrl} as the profile URL. Use Unknown for any undiscovered profile
 
 BEGIN UNTRUSTED SOURCE DATA
 ${JSON.stringify(corpus)}
-END UNTRUSTED SOURCE DATA`,
+END UNTRUSTED SOURCE DATA
+
+Keep the packet compact: return exactly 13 specialist agents with one finding and no more than two items in every other list, exactly 4 committee statements, 8 score dimensions, 3 probability scenarios, and 6 memo sections under 80 words each.`,
     text: { format: zodTextFormat(ModelAnalysisSchema, "startup_signal_analysis") },
   });
 
@@ -153,7 +155,7 @@ END UNTRUSTED SOURCE DATA`,
     corpus.map((item) => ({ id: item.evidenceId, sourceId: item.sourceId, title: item.title, url: item.url, sourceType: item.sourceType, excerpt: item.untrustedText, reliability: item.reliability })),
     model,
     now,
-    ["LIVE ANALYSIS: Evidence is limited to directly fetched pages on the submitted company site."],
+    ["LIVE ANALYSIS: Evidence is limited to directly fetched pages on the submitted company site.", ...crawlWarnings],
   );
 }
 

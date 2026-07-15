@@ -7,6 +7,8 @@ The application includes two paths:
 - **Demo:** a deterministic, explicitly fictional Heliograph investigation that works without API keys or network access.
 - **Live:** a bounded crawl of the submitted company website followed by a Zod-validated synthesis through the OpenAI Responses API.
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system, investigation pipeline, and trust-boundary diagrams.
+
 ## Stack
 
 - Next.js 16 App Router, React 19, strict TypeScript
@@ -76,7 +78,7 @@ Run `vercel env add` again for `preview` if live analysis is required on preview
 
 ## Security and reliability
 
-The live crawler accepts only HTTP/S, removes credentials and fragments, limits ports, resolves DNS, blocks private/reserved/link-local/metadata destinations, revalidates redirects, honors a conservative robots policy, and caps redirects, time, pages, and response bytes. It accepts only text content and uses Cheerio to remove scripts, styles, frames, SVG, and forms before model input.
+The live crawler accepts only HTTP/S, removes credentials and fragments, limits ports, resolves DNS, blocks private/reserved/link-local/metadata destinations, revalidates redirects, honors a conservative robots policy, and caps redirects, time, pages, and retained response bytes. It accepts only text content and uses Cheerio to remove scripts, styles, frames, SVG, and forms before model input. Pages larger than 500 KB are truncated at the byte boundary, the remaining response stream is cancelled, and the resulting coverage warning is preserved in the verdict and memo.
 
 When a public site returns HTTP 403 or 429 to the direct crawler, StartupSignal can fall back to the Responses API web search tool. That fallback is restricted to the submitted domain, cross-checks every displayed evidence URL against the tool's returned source list, marks the sources as indexed with medium reliability, and clearly records the direct-crawl failure in the investigation warnings.
 

@@ -3,11 +3,11 @@ import { assertPublicDestination, normalizePublicUrl, UrlSecurityError } from "@
 import type { SourceDocument } from "@/lib/schemas/investigation";
 
 const MAX_REDIRECTS = 3;
-const MAX_BYTES = 500_000;
+export const MAX_PAGE_BYTES = 500_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 const MAX_PAGES = 4;
 
-type FetchedPage = { url: URL; html: string; contentType: string };
+type FetchedPage = { url: URL; html: string; contentType: string; truncated: boolean };
 
 export class CrawlHttpError extends Error {
   constructor(public readonly status: number, public readonly url: string) {
@@ -16,23 +16,33 @@ export class CrawlHttpError extends Error {
   }
 }
 
-async function readBounded(response: Response) {
+export async function readBoundedBody(response: Response, maxBytes = MAX_PAGE_BYTES) {
   const reader = response.body?.getReader();
-  if (!reader) return "";
+  if (!reader) return { text: "", truncated: false, bytesRead: 0 };
   const decoder = new TextDecoder();
   let bytes = 0;
   let output = "";
+  let truncated = false;
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
-    bytes += value.byteLength;
-    if (bytes > MAX_BYTES) {
-      await reader.cancel();
-      throw new UrlSecurityError("A fetched page exceeded the 500 KB safety limit.");
+    const remaining = maxBytes - bytes;
+    if (remaining <= 0) {
+      truncated = true;
+      await reader.cancel().catch(() => undefined);
+      break;
     }
+    if (value.byteLength > remaining) {
+      output += decoder.decode(value.subarray(0, remaining), { stream: true });
+      bytes += remaining;
+      truncated = true;
+      await reader.cancel().catch(() => undefined);
+      break;
+    }
+    bytes += value.byteLength;
     output += decoder.decode(value, { stream: true });
   }
-  return output + decoder.decode();
+  return { text: output + decoder.decode(), truncated, bytesRead: bytes };
 }
 
 export async function secureFetch(startUrl: URL, accept = "text/html, text/plain;q=0.9"): Promise<FetchedPage> {
@@ -57,7 +67,8 @@ export async function secureFetch(startUrl: URL, accept = "text/html, text/plain
       if (!response.ok) throw new CrawlHttpError(response.status, url.toString());
       const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
       if (!(contentType === "text/html" || contentType === "text/plain")) throw new UrlSecurityError("The URL did not return a supported text page.");
-      return { url, html: await readBounded(response), contentType };
+      const body = await readBoundedBody(response);
+      return { url, html: body.text, contentType, truncated: body.truncated };
     } finally {
       clearTimeout(timeout);
     }
@@ -87,7 +98,7 @@ async function robotsPolicy(origin: string) {
   }
 }
 
-function extractPage(page: FetchedPage, id: number): SourceDocument & { links: URL[] } {
+function extractPage(page: FetchedPage, id: number): SourceDocument & { links: URL[]; truncated: boolean } {
   const $ = cheerio.load(page.html);
   $("script, style, noscript, iframe, svg, form").remove();
   const title = $("title").first().text().trim() || $("h1").first().text().trim() || page.url.hostname;
@@ -112,6 +123,7 @@ function extractPage(page: FetchedPage, id: number): SourceDocument & { links: U
     reliability: "high",
     isDemo: false,
     links,
+    truncated: page.truncated,
   };
 }
 
@@ -123,24 +135,29 @@ export async function crawlCompany(input: string) {
   if (!allowed(start)) throw new UrlSecurityError("The site robots policy disallows crawling the submitted page.");
 
   const first = extractPage(await secureFetch(start), 1);
+  const warnings: string[] = [];
+  if (first.truncated) warnings.push(`SOURCE TRUNCATED: ${first.url} exceeded the ${MAX_PAGE_BYTES / 1_000} KB fetch limit. Analysis used only the bounded prefix.`);
   const queue = first.links
     .filter(allowed)
     .filter((url) => usefulPath.test(url.pathname))
     .filter((url, index, list) => list.findIndex((item) => item.pathname === url.pathname) === index)
     .slice(0, MAX_PAGES - 1);
-  const { links: firstLinks, ...firstSource } = first;
+  const { links: firstLinks, truncated: firstTruncated, ...firstSource } = first;
   void firstLinks;
+  void firstTruncated;
   const sources: SourceDocument[] = [firstSource];
 
   for (const url of queue) {
     try {
       const page = extractPage(await secureFetch(url), sources.length + 1);
-      const { links: _links, ...source } = page;
+      if (page.truncated) warnings.push(`SOURCE TRUNCATED: ${page.url} exceeded the ${MAX_PAGE_BYTES / 1_000} KB fetch limit. Analysis used only the bounded prefix.`);
+      const { links: _links, truncated: _truncated, ...source } = page;
       void _links;
+      void _truncated;
       sources.push(source);
     } catch {
       // One inaccessible secondary page should not invalidate a usable homepage corpus.
     }
   }
-  return { canonicalUrl: first.url, sources };
+  return { canonicalUrl: first.url, sources, warnings };
 }

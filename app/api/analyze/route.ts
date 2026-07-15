@@ -51,7 +51,7 @@ export async function POST(request: Request) {
             send({ type: "stage", stageId: "discovery", status: "complete", message: `${crawled.sources.length} bounded sources collected` });
             send({ type: "stage", stageId: "website", status: "complete", message: "Untrusted page copy normalized" });
             send({ type: "stage", stageId: "product", status: "running", message: "Responses API committee is analyzing the corpus" });
-            run = InvestigationRunSchema.parse(await analyzeSources(crawled.canonicalUrl, crawled.sources));
+            run = InvestigationRunSchema.parse(await analyzeSources(crawled.canonicalUrl, crawled.sources, crawled.warnings));
           } catch (error) {
             if (!(error instanceof CrawlHttpError) || ![403, 429].includes(error.status)) throw error;
             if (!process.env.OPENAI_API_KEY) throw new Error(`Direct crawling was blocked (HTTP ${error.status}), and indexed-source fallback requires OPENAI_API_KEY.`);
